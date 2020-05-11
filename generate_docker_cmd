@@ -1,6 +1,8 @@
 #!/bin/bash -e
+function urldecode() { : "${*//+/ }"; echo -e "${_//%/\\x}"; }
+
 function output_cmd () {
-    local arg=( `echo $2 | tr -s '@' ' '`)
+    local arg=( `echo $3 | tr -s '@' ' '`)
     if [ ${#arg[@]} -ne 2 ]; then
         echo 'argument format is not correct!' 1>&2
         echo 'format="command_path@image_tag_name"' 1>&2
@@ -8,7 +10,9 @@ function output_cmd () {
     fi
     local command_path=${arg[0]}
     local command_name=`basename ${arg[0]}`
-    local image_tag_name=${arg[1]}
+    local image_tag_name=$(urldecode ${arg[1]})
+    echo command_path=${command_path}
+    echo image_tag_name=${image_tag_name}
     { \
         echo '#!/bin/sh -e'; \
         echo 'path_tmp=$PATH'; \
@@ -18,9 +22,9 @@ function output_cmd () {
         echo 'if [ ! -z "${local_cmd}" ]; then'; \
         echo '    ${local_cmd} "$@"'; \
         echo 'elif [ -t 1 ]; then'; \
-        echo '    docker run --rm -it --volumes-from '"$1"' -w $(pwd) -e USER_ID=${USER_ID} -e GROUP_ID=${GROUP_ID} '"${image_tag_name} ${command_path}"' "$@"'; \
+        echo '    docker run --rm -it --volumes-from '"$1"' --net='"$2"' -w $(pwd) -e USER_ID=${USER_ID} -e GROUP_ID=${GROUP_ID} '"${image_tag_name} ${command_path}"' "$@"'; \
         echo 'else'; \
-        echo '    docker run --rm -i --volumes-from '"$1"' -w $(pwd) -e USER_ID=${USER_ID} -e GROUP_ID=${GROUP_ID} '"${image_tag_name} ${command_path}"' "$@"'; \
+        echo '    docker run --rm -i --volumes-from '"$1"' --net='"$2"' -w $(pwd) -e USER_ID=${USER_ID} -e GROUP_ID=${GROUP_ID} '"${image_tag_name} ${command_path}"' "$@"'; \
         echo 'fi'; \
     } > /usr/local/bin/${command_name}
     chmod +x /usr/local/bin/${command_name}
@@ -33,10 +37,9 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-container_name=$1
-args=${@:2}
-echo "container_name = ${container_name}, arguments = ${args}"
+args=( ${@:3} )
+echo "volume_container_name = $1, shared_network_name = $2, arguments = ${args[@]}"
 
-for arg in ${args[@]}; do
-    output_cmd $1 ${arg}
+for arg in "${args[@]}"; do
+    output_cmd $1 $2 "${arg}"
 done
