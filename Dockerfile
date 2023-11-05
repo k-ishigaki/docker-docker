@@ -1,28 +1,29 @@
-FROM alpine:3.13 as downloader
+FROM alpine:3.18 as downloader
 
-RUN apk --no-cache add curl
+RUN apk --no-cache add curl~=8.4
 
-ARG DOCKER_VERSION=20.10.11
+ARG DOCKER_VERSION=24.0.7
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 RUN curl https://download.docker.com/linux/static/stable/x86_64/docker-$DOCKER_VERSION.tgz \
     | tar -xz -C /usr/bin --strip=1 docker/docker
 
-FROM alpine:3.13
-LABEL maintainer="Kazuki Ishigaki<k-ishigaki@frontier.hokudai.ac.jp>"
 
-RUN apk --no-cache add docker-compose shadow sudo
+WORKDIR /usr/local/lib/docker/cli-plugins
+
+ARG DOCKER_COMPOSE_VERSION=2.22.0
+RUN curl -L https://github.com/docker/compose/releases/download/v$DOCKER_COMPOSE_VERSION/docker-compose-linux-x86_64 -o docker-compose && \
+    chmod +x docker-compose
+
+ARG DOCKER_BUILDX_VERSION=0.11.2
+RUN curl -L https://github.com/docker/buildx/releases/download/v0.11.2/buildx-v$DOCKER_BUILDX_VERSION.linux-amd64 -o docker-buildx && \
+    chmod +x docker-buildx
+
+FROM alpine:3.18
+
 COPY --from=downloader /usr/bin/docker /usr/bin/docker
+COPY --from=downloader /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose
+COPY --from=downloader /usr/local/lib/docker/cli-plugins/docker-buildx /usr/local/lib/docker/cli-plugins/docker-buildx
 
 # Change the permissions so that any user can run
-RUN chown root:root `which docker` && \
-    chmod u+s `which docker`
-
-RUN echo "developer ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers.d/developer && \
-    chmod u+s `which groupadd` `which useradd` && \
-    { \
-    echo '#!/bin/sh -e'; \
-    echo 'getent group `id -g` || groupadd --gid `id -g` developer'; \
-    echo 'getent passwd `id -u` || useradd --uid `id -u` --gid `id -g` --home-dir /root developer'; \
-    echo 'sudo find /root -maxdepth 1 | xargs sudo chown `id -u`:`id -g`'; \
-    echo 'exec "$@"'; \
-    } > /entrypoint && chmod +x /entrypoint
-ENTRYPOINT [ "/entrypoint" ]
+RUN chown root:root "$(which docker)" && \
+    chmod u+s "$(which docker)"
