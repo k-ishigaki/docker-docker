@@ -1,6 +1,6 @@
-FROM alpine:3.18 as downloader
+FROM alpine:3.18 AS downloader
 
-RUN apk --no-cache add curl~=8.4
+RUN apk --no-cache add curl
 
 ARG DOCKER_VERSION=24.0.7
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
